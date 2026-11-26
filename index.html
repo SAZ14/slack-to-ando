@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slack to Ando</title>
+<meta name="description" content="Drop a Slack export. See the relay work agents should take over, and get a day-one wiki with every line linked to its source message.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<section class="band"><div class="wrap">
+  <div class="top">
+    <div>
+      <h1 id="headline">Migrate off Slack, and your agents know everything on day one</h1>
+      <p class="mute">Drop a Slack export. The audit shows the relay work humans are doing that agents should take over. The wiki pulls out who owns what, what was decided and the answers people keep re-asking for, each linked to the message it came from. Everything runs in this tab; nothing is uploaded.</p>
+    </div>
+    <div>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a Slack export zip">
+        <b id="dropLabel">Drop your Slack export (.zip)</b>
+        <span class="sm mute">Slack admin → Settings → Import/Export data → Export</span>
+      </div>
+      <input type="file" id="file" accept=".zip" hidden>
+      <div class="row"><button class="btn g" id="sample">Load sample workspace</button></div>
+      <div id="err" class="err" role="alert"></div>
+    </div>
+  </div>
+  <p class="sm mute" id="src"></p>
+  <nav class="tabs" aria-label="Views">
+    <a href="#audit" id="tab-audit">Relay audit</a>
+    <a href="#wiki" id="tab-wiki">Day-one wiki</a>
+  </nav>
+</div></section>
+
+<main id="view-audit">
+  <section class="band" style="padding-top:0"><div class="wrap">
+    <p class="finding" id="finding"></p>
+    <div class="slab">
+      <div><div class="big" id="kHours">–</div><div class="l">hours a week of human relay work an agent could take</div></div>
+      <div><div class="big" id="kShare">–</div><div class="l">of human messages are asks, status updates or tool glue</div></div>
+      <div><div class="big" id="kRepeat">–</div><div class="l">questions asked more than once</div></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--ask)"></i>Asks and pings</span>
+      <span><i style="background:var(--stat)"></i>Status and updates</span>
+      <span><i style="background:var(--tool)"></i>Tool glue (pasted GitHub, Linear, Sentry, Notion links)</span>
+      <span><i style="background:var(--oth)"></i>Real conversation</span>
+    </div>
+    <div id="chans"></div>
+  </div></section>
+  <section class="band alt"><div class="wrap">
+    <h2>The agents to hire</h2>
+    <p class="mute">A proposed roster, from what each channel actually spends its messages on.</p>
+    <div class="grid2" id="roster"></div>
+    <div class="copyrow"><button class="btn" id="copyPlan">Copy rollout plan</button><span class="sm mute" id="copiedPlan" aria-live="polite"></span></div>
+  </div></section>
+  <section class="band"><div class="wrap grid2" style="margin-top:0">
+    <div>
+      <h2>Questions your team keeps re-asking</h2>
+      <p class="mute sm">Clustered by wording. The wiki tab turns these into answers.</p>
+      <table class="stack"><thead><tr><th>Question</th><th class="num">Times</th><th>Where</th></tr></thead><tbody id="reps"></tbody></table>
+    </div>
+    <div>
+      <h2>People acting as human routers</h2>
+      <p class="mute sm">Who gets pinged on asks and answers them in threads.</p>
+      <table class="stack"><thead><tr><th>Person</th><th class="num">Pinged</th><th class="num">Answered</th><th class="num">Hrs / wk</th></tr></thead><tbody id="routers"></tbody></table>
+    </div>
+  </div></section>
+  <section class="band" style="padding-top:0"><div class="wrap">
+    <h2>Assumptions</h2>
+    <p class="mute sm">The hours figure is an estimate. Adjust it to your team.</p>
+    <div class="knobs">
+      <label for="mAsk">Minutes lost per ask (both sides, incl. context switch) <input type="range" id="mAsk" min="1" max="15" value="4"><b id="vAsk">4</b></label>
+      <label for="mStat">Minutes per status update <input type="range" id="mStat" min="1" max="15" value="3"><b id="vStat">3</b></label>
+    </div>
+  </div></section>
+</main>
+
+<main id="view-wiki" hidden>
+  <section class="band" style="padding-top:0"><div class="wrap">
+    <div class="slab">
+      <div><div class="big" id="wOwners">–</div><div class="l">areas with a named owner</div></div>
+      <div><div class="big" id="wDecisions">–</div><div class="l">decisions, dated and attributed</div></div>
+      <div><div class="big" id="wFaq">–</div><div class="l">repeat questions an agent can now answer</div></div>
+    </div>
+    <div class="tools">
+      <label for="domain" class="sm">Slack workspace URL, for links to source messages
+        <input id="domain" type="text" placeholder="yourteam.slack.com" autocomplete="off" spellcheck="false"></label>
+      <div class="row l">
+        <button class="btn" id="dl">Download wiki.md</button>
+        <button class="btn g" id="copyMd">Copy Markdown</button>
+        <span class="sm mute" id="mdMsg" aria-live="polite"></span>
+      </div>
+    </div>
+  </div></section>
+  <section class="band alt"><div class="wrap">
+    <h2>Who owns what</h2>
+    <p class="mute sm">From "who owns X?" threads and "I own" or "@name owns" messages. Latest claim wins; earlier owners are kept.</p>
+    <table class="stack"><thead><tr><th>Area</th><th>Owner</th><th>Since</th><th>Previously</th><th>Evidence</th></tr></thead><tbody id="owners"></tbody></table>
+  </div></section>
+  <section class="band"><div class="wrap">
+    <h2>Decisions</h2>
+    <p class="mute sm">Messages that state a decision ("Decision:", "we decided", "we're going with"), merged when restated.</p>
+    <ol class="timeline" id="decisions"></ol>
+  </div></section>
+  <section class="band alt"><div class="wrap">
+    <h2>Answers to repeat questions</h2>
+    <p class="mute sm">The most recent substantive thread answer to each question cluster. When answers changed over time, the newest wins and the older one is flagged.</p>
+    <details class="polish">
+      <summary>Polish answers with Claude (optional)</summary>
+      <p class="sm mute">Sends only the extracted questions and answers to the Claude API with your key. The key stays in this tab's memory.</p>
+      <div class="row l">
+        <input id="apiKey" type="password" placeholder="sk-ant-…" autocomplete="off" aria-label="Anthropic API key">
+        <button class="btn" id="polish">Polish</button>
+        <span class="sm mute" id="polishMsg" aria-live="polite"></span>
+      </div>
+    </details>
+    <div class="faq" id="faq"></div>
+  </div></section>
+</main>
+
+<footer class="band sm mute"><div class="wrap">Unofficial side project, not affiliated with Ando. The sample workspace, "Northwind", is invented. Classification and extraction are heuristic (regular expressions and wording similarity), and every result shows its sources so it can be checked. <a href="https://github.com/SAZ14/slack-to-ando">Source on GitHub</a>.</div></footer>
+<script type="module" src="src/ui.js"></script>
+</body>
+</html>

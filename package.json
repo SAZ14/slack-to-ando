@@ -1,0 +1,16 @@
+{
+  "name": "slack-to-ando",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Unofficial Slack → Ando migration kit: relay audit and day-one wiki from a Slack export, in the browser.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "sample": "python3 sample/generate_export.py",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "jszip": "3.10.1"
+  },
+  "license": "MIT"
+}
