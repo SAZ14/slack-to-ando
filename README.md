@@ -1,5 +1,7 @@
 # slack-to-ando
 
+[![Test and deploy](https://github.com/SAZ14/slack-to-ando/actions/workflows/pages.yml/badge.svg)](https://github.com/SAZ14/slack-to-ando/actions/workflows/pages.yml)
+
 **Migrate off Slack, and your agents know everything on day one.**
 
 Drop a Slack workspace export into the page and get two things:
