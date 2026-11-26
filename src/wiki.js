@@ -137,7 +137,6 @@ export function faq(D, A, T = threads(D)) {
       superseded: superseded.length ? superseded[superseded.length - 1].m : null,
       sources: [...agree.slice(-3), ...superseded.slice(-1)].map(a => ({ ch: a.ch, m: a.m })),
       askedAt: { ch: c.items[0].ch, m: c.items[0].m },
-      polished: null,
     });
   }
   // Differently worded questions with the same answer are one entry.
@@ -184,7 +183,7 @@ export function toMarkdown(W, D, { domain = '', company = 'Your team' } = {}) {
     L.push(`- **${day(d.ts)}**: ${cap(mdText(d.statement, D.users))} (${name(d.by)} in #${d.ch}${d.sources.length > 1 ? `, restated ${d.sources.length - 1}x` : ''}). Source: ${src(d.sources[0])}`);
   L.push('', '## Answers to repeat questions', '');
   for (const f of W.faq) {
-    L.push(`### ${cap(f.question)}`, '', f.polished || mdText(f.answer.text, D.users), '',
+    L.push(`### ${cap(f.question)}`, '', mdText(f.answer.text, D.users), '',
       `_Asked ${f.asked}x in ${f.chs.map(c => '#' + c).join(', ')}. Answered by ${name(f.answeredBy)}${f.agree > 1 ? `, confirmed in ${f.agree} threads` : ''}${f.superseded ? '. An earlier, different answer was superseded' : ''}. Sources: ${f.sources.slice(0, 3).map(src).join(' · ')}_`, '');
   }
   return L.join('\n');

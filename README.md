@@ -41,7 +41,6 @@ Ando's bet is that agents should be teammates in the same channels as humans, sh
 Optional extras:
 - **Permalinks:** enter your workspace URL (`yourteam.slack.com`) and every source becomes an "open in Slack" link.
 - **Markdown export:** download or copy the wiki as `wiki.md`.
-- **Polish with Claude:** paste an Anthropic API key to rewrite FAQ answers as clean prose. Only the extracted snippets are sent, the key stays in memory, and links and facts are kept.
 
 ## Try it
 
@@ -64,7 +63,6 @@ index.html        page shell (two tabs: #audit, #wiki)
 src/parse.js      Slack export zip → users, channels, messages
 src/audit.js      message classification, repeat-question clustering, routers, agent roster
 src/wiki.js       ownership, decisions, FAQ, Markdown export
-src/polish.js     optional Claude API rewrite of FAQ answers
 src/ui.js         rendering and events
 sample/           synthetic export and its generator
 tests/            node:test suite

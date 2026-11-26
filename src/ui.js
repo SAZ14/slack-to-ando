@@ -1,7 +1,6 @@
 import { parseExport } from './parse.js';
 import { analyze, totals, roster, routers, planText, ROLE } from './audit.js';
 import { buildWiki, toMarkdown } from './wiki.js';
-import { polishFaq } from './polish.js';
 import { esc, clean, day, firstName, permalink } from './text.js';
 
 const $ = id => document.getElementById(id);
@@ -78,15 +77,14 @@ function renderWiki() {
     || '<li class="empty">No decisions found.</li>';
 
   $('faq').innerHTML = W.faq.map(f => `<article class="qa"><h3>${esc(cap(f.question))}</h3>` +
-    `<p class="a">${f.polished ? richMd(f.polished) : rich(f.answer.text)}</p>` +
-    `<div class="meta">Asked ${f.asked}× in ${f.chs.map(c => '#' + esc(c)).join(', ')}. Answered by ${esc(name(f.answeredBy))}${f.agree > 1 ? `, confirmed in ${f.agree} threads` : ''}.${f.polished ? ' Polished by Claude.' : ''}</div>` +
+    `<p class="a">${rich(f.answer.text)}</p>` +
+    `<div class="meta">Asked ${f.asked}× in ${f.chs.map(c => '#' + esc(c)).join(', ')}. Answered by ${esc(name(f.answeredBy))}${f.agree > 1 ? `, confirmed in ${f.agree} threads` : ''}.</div>` +
     (f.superseded ? `<p class="sm"><span class="flag">Answer changed</span> Earlier: "${rich(f.superseded.text)}" (${day(f.superseded.ts)})</p>` : '') +
     (f.also?.length ? `<p class="sm mute">Also asked as: ${f.also.map(q => `"${esc(q)}"`).join(', ')}</p>` : '') +
     sources(f.sources, 'sources') + '</article>').join('')
     || '<p class="empty">No answered repeat questions found.</p>';
 }
 const cap = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
-const richMd = t => esc(t).replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, (_, l, u) => `<a href="${u}" target="_blank" rel="noopener">${l}</a>`);
 const markdown = () => toMarkdown(S.W, S.D, { domain: domain(), company: S.company });
 
 // ---------- loading ----------
@@ -156,13 +154,6 @@ $('dl').addEventListener('click', () => {
   a.href = URL.createObjectURL(new Blob([markdown()], { type: 'text/markdown' }));
   a.download = 'wiki.md'; document.body.append(a); a.click(); a.remove();
   $('mdMsg').textContent = 'If nothing downloaded, use Copy Markdown.';
-});
-$('polish').addEventListener('click', async () => {
-  if (!S.W) return;
-  const b = $('polish'); b.disabled = true; $('polishMsg').textContent = 'Asking Claude…';
-  try { const n = await polishFaq(S.W.faq, S.D.users, { apiKey: $('apiKey').value.trim() }); $('polishMsg').textContent = `Polished ${n} answers.`; renderWiki(); labelStacks(); }
-  catch (e) { $('polishMsg').textContent = e.message; }
-  finally { b.disabled = false; }
 });
 addEventListener('hashchange', route);
 route();

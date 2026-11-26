@@ -47,11 +47,10 @@ th{font-size:13px;color:var(--mute);font-weight:500}td.num,th.num{text-align:rig
 .copyrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px}
 .tools{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between;margin-top:20px}
 .tools label{display:grid;gap:6px;font-weight:500}
-details.src summary,details.polish summary{cursor:pointer;font-size:14px;font-weight:500;min-height:28px}
+details.src summary{cursor:pointer;font-size:14px;font-weight:500;min-height:28px}
 details.src ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
 details.src li{font-size:14px;border-left:3px solid var(--line);padding:2px 0 2px 10px}
 details.src li b{font-weight:600}details.src .when{color:var(--mute)}
-details.polish{border:1px solid var(--line);border-radius:16px;padding:12px 16px;background:var(--paper);margin:14px 0 18px}
 .timeline{list-style:none;margin:16px 0 0;padding:0}
 .timeline li{display:grid;grid-template-columns:110px minmax(0,1fr);gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
 .timeline .d{font-weight:500;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
