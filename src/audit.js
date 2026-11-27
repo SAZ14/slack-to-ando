@@ -1,6 +1,6 @@
 // Relay audit: classify human messages, cluster repeat questions, find human routers,
 // and propose an agent roster per channel.
-import { toks, jaccard, clean } from './text.js';
+import { toks, clean } from './text.js';
 
 export const RE_ASK = /\b(can|could|would) (you|someone|anyone|somebody)\b|\banyone (know|have|seen|got)\b|\bdoes anyone\b|\bwho('s| is)? (owns|knows|has|can|is on|on call|runs)\b|\bany (update|news|eta)\b|\bstatus on\b|\bwhere('?s| is| are| do| can)\b|\bhow do (i|we)\b|\bwhat did we decide\b|\bwhat'?s our\b|\bis \S+ (down|broken)\b/i;
 const RE_STAT = /\b(standup|stand-up|update|status|eod|wip|yesterday|today:|recap|weekly|shipped|blocked|rolled back|postmortem)\b/i;
@@ -8,6 +8,10 @@ const RE_TOOL = /(github\.com|linear\.app|sentry\.io|notion\.so|posthog|granola)
 const RE_INC = /\b(down|outage|errors?|500s?|alert|incident|spike|failing|rollback|latency)\b/i;
 const RE_DOC = /\b(doc|spec|policy|wiki|notion|written down|decide)\b/i;
 const HUMAN_SUBTYPES = new Set(['thread_broadcast', 'file_share', 'me_message']);
+
+// Broader question shapes seen in real chat ("Is there a way…", "Why does…"), used when the message also has a "?".
+const RE_Q = /\b(is there|are there|is it|can i|can we|can you|could i|could you|should i|should we|how (do|does|did|can|would|should|to|is|are)|what('?s| is| are| do| does| would)|why (does|do|did|is|are|would|doesn'?t|isn'?t|can'?t|won'?t)|which|where|when (should|do|does|is)|does (anyone|anybody|someone)|has (anyone|anybody)|anyone|any (idea|ideas|way|tips))\b/i;
+export const isAsk = (tx, mentions = 0) => RE_ASK.test(tx) || (/\?/.test(tx) && (RE_Q.test(tx) || mentions > 0));
 
 export const isBot = m => m.subtype === 'bot_message' || !!m.bot_id;
 export const isHuman = m => !isBot(m) && (!m.subtype || HUMAN_SUBTYPES.has(m.subtype));
@@ -25,7 +29,7 @@ export function threads(D) {
   return T;
 }
 
-export function analyze(D) {
+export function analyze(D, { similarity = SIMILARITY } = {}) {
   let minT = Infinity, maxT = 0;
   const chans = [], asks = [], people = {};
   const P = id => (people[id] ??= { pinged: 0, answered: 0 });
@@ -49,7 +53,7 @@ export function analyze(D) {
       if (RE_INC.test(tx)) s.inc++;
       if (/github\.com/i.test(tx)) s.gh++;
       if (RE_DOC.test(tx)) s.doc++;
-      if (!isReply(m) && (RE_ASK.test(tx) || (tx.includes('?') && ments.length))) {
+      if (!isReply(m) && isAsk(tx, ments.length)) {
         s.ask++;
         askers.set(m.ts, m.user);
         ments.forEach(u => P(u).pinged++);
@@ -62,18 +66,50 @@ export function analyze(D) {
   }
 
   const weeks = Math.max(1, (maxT - minT) / (7 * 86400));
-  const clusters = [];
-  for (const a of asks) {
-    if (a.tk.length < 2) continue;
-    const c = clusters.find(c => jaccard(c.tk, a.tk) >= 0.45);
-    if (c) { c.items.push(a); c.chs.add(a.ch); }
-    else clusters.push({ tk: a.tk, items: [a], chs: new Set([a.ch]) });
-  }
+  const clusters = clusterAsks(asks, similarity);
   const reps = clusters.filter(c => c.items.length > 1)
     .map(c => ({ ...c, n: c.items.length, text: c.items[0].m.text }))
     .sort((a, b) => b.n - a.n);
   chans.sort((a, b) => (b.ask + b.stat + b.tool) - (a.ask + a.stat + a.tool));
   return { chans, reps, people, weeks, minT, maxT };
+}
+
+/**
+ * Group asks that are worded alike. TF-IDF cosine against each cluster's first question,
+ * with an inverted index so it stays fast on hundreds of thousands of messages.
+ * Very common words (in over 5% of asks) are not indexed; they carry little signal.
+ */
+export const SIMILARITY = 0.5;
+export function clusterAsks(asks, threshold = SIMILARITY) {
+  const df = new Map();
+  for (const a of asks) for (const w of new Set(a.tk)) df.set(w, (df.get(w) || 0) + 1);
+  const N = asks.length || 1, common = Math.max(20, N * 0.05);
+  const vec = tk => {
+    const v = new Map();
+    for (const w of tk) v.set(w, (v.get(w) || 0) + 1);
+    let n = 0;
+    for (const [w, c] of v) { const x = c * (Math.log((N + 1) / ((df.get(w) || 0) + 1)) + 1); v.set(w, x); n += x * x; }
+    n = Math.sqrt(n) || 1;
+    for (const [w, x] of v) v.set(w, x / n);
+    return v;
+  };
+  const clusters = [], index = new Map();
+  for (const a of asks) {
+    // Skip follow-ups ("what's the exact error?") and replies aimed at one person: not reusable questions.
+    const tx = a.m.text || '';
+    if (a.tk.length < 3 || /^\s*<@/.test(tx)) continue;
+    if (/\byour?\b/i.test(tx) && !/\b(any|some)(one|body)\b|\byou (all|guys|folks)\b/i.test(tx)) continue; // "can you show your Msg type?"
+    const v = vec(a.tk), score = new Map();
+    for (const [w, x] of v) for (const ci of index.get(w) || []) score.set(ci, (score.get(ci) || 0) + x * clusters[ci].v.get(w));
+    let best = -1, bs = 0;
+    for (const [ci, sc] of score) if (sc > bs) { bs = sc; best = ci; }
+    if (best >= 0 && bs >= threshold) { clusters[best].items.push(a); clusters[best].chs.add(a.ch); continue; }
+    const ci = clusters.length;
+    clusters.push({ tk: a.tk, v, items: [a], chs: new Set([a.ch]) });
+    for (const w of v.keys()) if ((df.get(w) || 0) <= common) { if (!index.has(w)) index.set(w, []); index.get(w).push(ci); }
+  }
+  for (const c of clusters) delete c.v;
+  return clusters;
 }
 
 export function totals(A, mAsk = 4, mStat = 3) {

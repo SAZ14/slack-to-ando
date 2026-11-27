@@ -24,10 +24,11 @@ const CLAIMS = [
   { re: /<@([A-Z0-9]+)>\s+(?:is\s+)?on[- ]call\s+for\s+(?:the\s+)?(.+)/i, who: 'mention', fmt: t => `${t} on-call` },
   // "<@U> has payments on-call this month"
   { re: /<@([A-Z0-9]+)>\s+has\s+(.+?)\s+on[- ]call/i, who: 'mention', fmt: t => `${t} on-call` },
-  // "<@U> owns billing now", "<@U> owns it now"
-  { re: /<@([A-Z0-9]+)>\s+(?:now\s+)?(?:owns|runs|handles|is the owner of)\s+(?:the\s+)?(.+)/i, who: 'mention' },
-  // "I own the pricing page copy", "I'm taking over the deploy pipeline from Dev"
-  { re: /\bI(?:'m| am)?\s+(?:now\s+)?(?:own|run|handle|taking over|take over|the owner of)\s+(?:the\s+)?(.+)/i, who: 'author' },
+  // "<@U> owns billing now", "<@U> owns it now", "<@U> maintains the http package"
+  { re: /<@([A-Z0-9]+)>\s+(?:now\s+)?(?:owns|maintains|is the owner of|is the maintainer of)\s+(?:the\s+)?(.+)/i, who: 'mention' },
+  // "I own the pricing page copy", "I'm taking over the deploy pipeline from Dev", "I maintain the http package"
+  // ("I run X" is deliberately excluded: in real chat it almost always means running a command.)
+  { re: /\bI(?:'m| am)?\s+(?:now\s+)?(?:own|maintain|taking over|take over|the owner of|the maintainer of)\s+(?:the\s+)?(.+)/i, who: 'author' },
 ];
 
 function claimIn(m, qTopic) {
@@ -36,9 +37,15 @@ function claimIn(m, qTopic) {
     const x = tx.match(c.re);
     if (!x) continue;
     const owner = c.who === 'mention' ? x[1] : m.user;
-    let topic = tidyTopic((c.who === 'mention' ? x[2] : x[1]).replace(STOP_TAIL, ''));
+    let raw = c.who === 'mention' ? x[2] : x[1];
+    // "I maintain <https://npmjs.com/package/foo>" or "[Foo](https://…)": name the thing, not the URL
+    raw = raw.replace(/^<(https?:[^|>]+)(?:\|([^>]+))?>/, (_, u, l) => l || u.replace(/\/+$/, '').split('/').pop())
+      .replace(/^\[([^\]]+)\]\([^)]*\)/, '$1');
+    let topic = tidyTopic(raw.replace(STOP_TAIL, ''));
     if (/^(it|that|this|them)$/i.test(topic)) topic = qTopic || '';
     if (!topic || topic.split(/\s+/).length > 6) continue;
+    if (/[`?<]/.test(topic) || /^(a|an|some|any|my|your|this|these|both|all|ones|rights|and|it all)\b/i.test(topic) || /\b(your|via)\b/i.test(topic)) continue; // code, questions, "I own both of your books"
+    if (/\?\s*$/.test(tx) || /\b(if|when|whether)\s+I\b/i.test(tx)) continue; // hypotheticals and questions are not claims
     return { owner, topic: c.fmt ? c.fmt(topic) : topic };
   }
   // "that's me" / "me" in reply to a who-owns question
@@ -89,7 +96,8 @@ export function owners(D, T = threads(D)) {
 
 // ---------- decisions ----------
 const DECISION = [
-  /^\s*(?:decision(?:\s+from\s+[^:]+)?|decided|final call|agreed)\s*:\s*(.+)/i,
+  // "Decision: …" with a real statement after the colon (so "agreed :)" is not a decision)
+  /^\s*(?:decision(?:\s+from\s+[^:]+)?|decided|final call|agreed)\s*:\s+([A-Za-z0-9`"'].{11,})/i,
   /\bwe(?:'ve| have)?\s+decided\s+(?:to\s+|on\s+)?(.+)/i,
   /\b(?:we're|we are|we'll|we will)\s+go(?:ing)?\s+with\s+(.+)/i,
 ];
@@ -114,13 +122,40 @@ export function decisions(D) {
 }
 
 // ---------- answers to repeat questions ----------
+/**
+ * Score replies by how much they look like an answer to `q`: shared key words, a link or code,
+ * an early position, @-addressing the asker; penalize replies that are questions themselves.
+ * Returns null when nothing looks like an answer (better no entry than a wrong one).
+ */
+export const MIN_ANSWER_SCORE = 1;
+export function bestReply(q, replies) {
+  const qtk = new Set(toks(q.text));
+  const cands = replies.filter(r => r.user !== q.user && substantive(r.text));
+  let best = null, bs = -Infinity;
+  cands.forEach((r, i) => {
+    const t = r.text || '';
+    const overlap = new Set(toks(t).filter(w => qtk.has(w))).size;
+    let sc = 2 * overlap / Math.sqrt(qtk.size || 1);
+    if (/<https?:|`/.test(t)) sc += 1;
+    if (i < 3) sc += 0.5;
+    if (t.includes(`<@${q.user}>`)) sc += 1;
+    if (/\?\s*$/.test(t)) sc -= 1;
+    if (sc > bs) { bs = sc; best = r; }
+  });
+  // A lone, early reply in a short thread is usually the answer even with few shared words.
+  if (best && bs < MIN_ANSWER_SCORE && !(cands.length === 1 && replies.length <= 3 && !/\?\s*$/.test(best.text))) return null;
+  return best;
+}
+
 export function faq(D, A, T = threads(D)) {
   const out = [];
   for (const c of A.reps) {
+    // Best reply per thread: the one that responds to the question, not just the last word.
     const answers = [];
-    for (const it of c.items)
-      for (const r of T.get(`${it.ch}|${it.m.ts}`) || [])
-        if (r.user !== it.m.user && substantive(r.text)) answers.push({ ch: it.ch, m: r, q: it.m });
+    for (const it of c.items) {
+      const best = bestReply(it.m, T.get(`${it.ch}|${it.m.ts}`) || []);
+      if (best) answers.push({ ch: it.ch, m: best, q: it.m });
+    }
     if (!answers.length) continue;
     answers.sort((a, b) => a.m.ts - b.m.ts);
     const latest = answers[answers.length - 1];

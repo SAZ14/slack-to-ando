@@ -19,6 +19,10 @@ Everything runs in your browser. The export is read locally and never leaves the
 
 > Unofficial side project built for the [Ando](https://www.ando.so) team. Not affiliated with Ando.
 
+## Tested on real Slack data
+
+Beyond the synthetic sample, the tool was run on **460,065 real messages** from four public Slack communities (Python, Clojure, Elm, Racket; MSR 2020 dataset). It processes the largest export, 259k messages, in about 2 seconds in the browser. On held-out random samples, **55%** of wiki answers correctly answer their question and **36%** of repeat-question groups are true repeats. The test exposed bugs in owner and question detection, which are fixed. Full method, every labeled example, and what's still weak: **[EVALUATION.md](EVALUATION.md)**.
+
 ## Why
 
 Ando's bet is that agents should be teammates in the same channels as humans, sharing context. Two things make that hard to adopt:
